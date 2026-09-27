@@ -1,24 +1,45 @@
 import { ADVISORY_DATA } from '../constants/advisory';
 import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
-// Default configuration with your local Wi-Fi IP address
-let API_BASE_URL = "http://172.19.23.6:8000";
+// Use the hosted API by default so the app works without a local dev server.
+const DEFAULT_API_BASE_URL = 'https://crop-disease-and-yoeld-prediction.onrender.com';
+const API_CONFIG_FILE = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}cropguard-api-config.json`;
+let API_BASE_URL = DEFAULT_API_BASE_URL;
+
+const normalizeBaseUrl = (url) => url.trim().replace(/\/+$/, '');
+
+// Load a saved address once at startup. If the file does not exist yet, keep
+// the hosted URL as the default.
+const configReady = (async () => {
+  try {
+    const savedConfig = JSON.parse(await FileSystem.readAsStringAsync(API_CONFIG_FILE));
+    if (typeof savedConfig.apiBaseUrl === 'string' && savedConfig.apiBaseUrl.trim()) {
+      API_BASE_URL = normalizeBaseUrl(savedConfig.apiBaseUrl);
+    }
+  } catch {
+    // First launch, or no valid saved configuration: use the hosted default.
+  }
+  return API_BASE_URL;
+})();
 
 export const getBaseUrl = () => API_BASE_URL;
 
-export const setBaseUrl = (url) => {
-  if (!url) return;
-  let cleanUrl = url.trim();
-  if (cleanUrl.endsWith('/')) {
-    cleanUrl = cleanUrl.slice(0, -1);
-  }
+export const loadBaseUrl = () => configReady;
+
+export const setBaseUrl = async (url) => {
+  if (!url || !url.trim()) return API_BASE_URL;
+  await configReady;
+  const cleanUrl = normalizeBaseUrl(url);
   API_BASE_URL = cleanUrl;
+  await FileSystem.writeAsStringAsync(API_CONFIG_FILE, JSON.stringify({ apiBaseUrl: cleanUrl }));
   return API_BASE_URL;
 };
 
 // Check if backend is reachable
 export const testConnection = async () => {
   try {
+    await configReady;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
@@ -41,6 +62,7 @@ export const testConnection = async () => {
 // Send full inference request (Image + Soil/Environmental Features)
 export const predictFull = async (imageUri, soilData) => {
   try {
+    await configReady;
     const formData = new FormData();
 
     // Expo SDK 57 expects Blob/File values, not React Native's legacy { uri } part.

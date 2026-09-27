@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,18 +10,30 @@ import {
   ActivityIndicator,
   Alert
 } from 'react-native';
-import { getBaseUrl, setBaseUrl, testConnection } from '../services/api';
+import { getBaseUrl, loadBaseUrl, setBaseUrl, testConnection } from '../services/api';
 
 export default function SettingsScreen({ isDemoMode, onToggleDemoMode }) {
   const [serverUrl, setServerUrlState] = useState(getBaseUrl());
   const [testing, setTesting] = useState(false);
   const [pingStatus, setPingStatus] = useState(null); // { success, message }
 
-  const handleSaveUrl = () => {
-    const updated = setBaseUrl(serverUrl);
-    setServerUrlState(updated);
-    setPingStatus(null);
-    Alert.alert("Server Configured", `Backend address set to:\n${updated}`);
+  useEffect(() => {
+    let active = true;
+    loadBaseUrl().then((url) => {
+      if (active) setServerUrlState(url);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const handleSaveUrl = async () => {
+    try {
+      const updated = await setBaseUrl(serverUrl);
+      setServerUrlState(updated);
+      setPingStatus(null);
+      Alert.alert("Server Configured", `Backend address saved:\n${updated}`);
+    } catch (error) {
+      Alert.alert("Could Not Save Address", error.message || "Please try again.");
+    }
   };
 
   const handleTestConnection = async () => {
@@ -43,10 +55,14 @@ export default function SettingsScreen({ isDemoMode, onToggleDemoMode }) {
     }
   };
 
-  const setPresetUrl = (url) => {
-    setServerUrlState(url);
-    setBaseUrl(url);
-    setPingStatus(null);
+  const setPresetUrl = async (url) => {
+    try {
+      const updated = await setBaseUrl(url);
+      setServerUrlState(updated);
+      setPingStatus(null);
+    } catch (error) {
+      Alert.alert("Could Not Save Address", error.message || "Please try again.");
+    }
   };
 
   return (
